@@ -1,0 +1,34 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Output of build tools
+/bin/
+/build/
+/dist/
+
+# IDE/editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Dependency directories
+vendor/
+
+# Go modules
+/go.sum
+
+# AutoRecon özel dizinleri
+projects/
