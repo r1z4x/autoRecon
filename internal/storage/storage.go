@@ -106,7 +106,7 @@ func (s *Storage) GetToolLogsDir(projectDir, toolName string) string {
 
 // DownloadSecLists downloads SecLists repository
 func (s *Storage) DownloadSecLists() error {
-	seclistsPath := filepath.Join(s.globalDataDir, "Seclists")
+	seclistsPath := filepath.Join(s.globalDataDir, "SecLists")
 
 	// Check if already exists
 	if _, err := os.Stat(seclistsPath); err == nil {
@@ -171,7 +171,7 @@ func (s *Storage) createDefaultResolvers(path string) error {
 
 // GetSecListsPath returns the path to SecLists
 func (s *Storage) GetSecListsPath() string {
-	return filepath.Join(s.globalDataDir, "Seclists")
+	return filepath.Join(s.globalDataDir, "SecLists")
 }
 
 // GetResolversPath returns the path to resolvers

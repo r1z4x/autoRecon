@@ -115,16 +115,16 @@ pip3 install shodan
 
 # Create global directories
 echo "📁 Creating global directories..."
-sudo mkdir -p /opt/Seclists
+sudo mkdir -p /opt/SecLists
 sudo mkdir -p /opt/Resolvers
 
 # Download SecLists if not present
-if [ ! -d "/opt/Seclists" ] || [ -z "$(ls -A /opt/Seclists)" ]; then
+if [ ! -d "/opt/SecLists" ] || [ -z "$(ls -A /opt/SecLists)" ]; then
     echo "📥 Downloading SecLists..."
-    sudo git clone https://github.com/danielmiessler/SecLists.git /opt/Seclists
+    sudo git clone https://github.com/danielmiessler/SecLists.git /opt/SecLists
 else
     echo "✓ SecLists already exists, updating..."
-    sudo git -C /opt/Seclists pull
+    sudo git -C /opt/SecLists pull
 fi
 
 # Download resolvers if not present
@@ -138,9 +138,9 @@ fi
 
 # Set permissions
 echo "🔐 Setting permissions..."
-sudo chown -R $USER:$USER /opt/Seclists
+sudo chown -R $USER:$USER /opt/SecLists
 sudo chown -R $USER:$USER /opt/Resolvers
-chmod -R 755 /opt/Seclists
+chmod -R 755 /opt/SecLists
 chmod -R 755 /opt/Resolvers
 
 # Build the application
@@ -162,7 +162,7 @@ echo "║                    Installation Complete!                    ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 echo "✓ AutoRecon has been installed successfully!"
-echo "✓ Global dependencies are available in /opt/Seclists and /opt/Resolvers"
+echo "✓ Global dependencies are available in /opt/SecLists and /opt/Resolvers"
 echo "✓ You can now run: autorecon --help"
 echo
 echo "📋 Next steps:"

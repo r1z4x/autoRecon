@@ -53,7 +53,7 @@ func NewConfig() *Config {
 	}
 
 	// Set default paths
-	config.DNSXWordlist = filepath.Join(config.GlobalDataDir, "Seclists", "Discovery", "DNS", "subdomains-top1million-5000.txt")
+	config.DNSXWordlist = filepath.Join(config.GlobalDataDir, "SecLists", "Discovery", "DNS", "subdomains-top1million-5000.txt")
 	config.ResolverList = filepath.Join(config.GlobalDataDir, "Resolvers", "resolvers-trusted.txt")
 
 	// Set default custom headers
@@ -129,9 +129,9 @@ func (c *Config) CheckRequiredTools() error {
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
 	// Check if SecLists exists
-	if _, err := os.Stat(filepath.Join(c.GlobalDataDir, "Seclists")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(c.GlobalDataDir, "SecLists")); os.IsNotExist(err) {
 		return fmt.Errorf("SecLists not found in %s. Please run: sudo git clone https://github.com/danielmiessler/SecLists.git %s",
-			c.GlobalDataDir, filepath.Join(c.GlobalDataDir, "Seclists"))
+			c.GlobalDataDir, filepath.Join(c.GlobalDataDir, "SecLists"))
 	}
 
 	// Check if resolvers exist
