@@ -1215,6 +1215,8 @@ func (s *Scanner) ScanSubdomains(ctx context.Context, domains []string, projectD
 			amassCmd := exec.CommandContext(ctx, "amass", "enum",
 				"-d", domain,
 				"-passive",
+				"-brute",                                                            // Add brute force
+				"-w", "/opt/Seclists/Discovery/DNS/subdomains-top1million-5000.txt", // Use wordlist
 				"-o", amassOutput)
 
 			if err := amassCmd.Run(); err == nil {
@@ -1842,8 +1844,8 @@ func (wp *WorkerPool) scanSubdomains(target string, data map[string]interface{})
 		amassCmd := exec.CommandContext(wp.ctx, "amass", "enum",
 			"-d", target,
 			"-passive",
-			"-brute",                                                                            // Add brute force
-			"-w", "/usr/share/wordlists/SecLists/Discovery/DNS/subdomains-top1million-5000.txt", // Use wordlist
+			"-brute",                                                            // Add brute force
+			"-w", "/opt/Seclists/Discovery/DNS/subdomains-top1million-5000.txt", // Use wordlist
 			"-o", amassOutput)
 
 		if err := amassCmd.Run(); err == nil {

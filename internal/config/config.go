@@ -40,7 +40,7 @@ type Config struct {
 // NewConfig creates a new configuration instance
 func NewConfig() *Config {
 	config := &Config{
-		GlobalDataDir:  "/opt/autorecon",
+		GlobalDataDir:  "/opt",
 		ProjectsDir:    "./projects",
 		RateLimit:      5,
 		StatusCodes:    []string{"200", "201", "202", "203", "204", "206", "301", "302", "303", "307", "308"},
@@ -53,8 +53,8 @@ func NewConfig() *Config {
 	}
 
 	// Set default paths
-	config.DNSXWordlist = filepath.Join(config.GlobalDataDir, "SecLists", "Discovery", "DNS", "subdomains-top1million-5000.txt")
-	config.ResolverList = filepath.Join(config.GlobalDataDir, "resolvers", "resolvers-trusted.txt")
+	config.DNSXWordlist = filepath.Join(config.GlobalDataDir, "Seclists", "Discovery", "DNS", "subdomains-top1million-5000.txt")
+	config.ResolverList = filepath.Join(config.GlobalDataDir, "Resolvers", "resolvers-trusted.txt")
 
 	// Set default custom headers
 	config.CustomHeaders["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -93,7 +93,7 @@ func (c *Config) ensureDirectories() error {
 	dirs := []string{
 		c.GlobalDataDir,
 		c.ProjectsDir,
-		filepath.Join(c.GlobalDataDir, "resolvers"),
+		filepath.Join(c.GlobalDataDir, "Resolvers"),
 	}
 
 	for _, dir := range dirs {
@@ -129,9 +129,9 @@ func (c *Config) CheckRequiredTools() error {
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
 	// Check if SecLists exists
-	if _, err := os.Stat(filepath.Join(c.GlobalDataDir, "SecLists")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(c.GlobalDataDir, "Seclists")); os.IsNotExist(err) {
 		return fmt.Errorf("SecLists not found in %s. Please run: sudo git clone https://github.com/danielmiessler/SecLists.git %s",
-			c.GlobalDataDir, filepath.Join(c.GlobalDataDir, "SecLists"))
+			c.GlobalDataDir, filepath.Join(c.GlobalDataDir, "Seclists"))
 	}
 
 	// Check if resolvers exist

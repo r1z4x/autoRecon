@@ -115,23 +115,22 @@ pip3 install shodan
 
 # Create global directories
 echo "📁 Creating global directories..."
-sudo mkdir -p /opt/autorecon
-sudo mkdir -p /opt/autorecon/resolvers
-sudo mkdir -p /opt/autorecon/SecLists
+sudo mkdir -p /opt/Seclists
+sudo mkdir -p /opt/Resolvers
 
 # Download SecLists if not present
-if [ ! -d "/opt/autorecon/SecLists" ] || [ -z "$(ls -A /opt/autorecon/SecLists)" ]; then
+if [ ! -d "/opt/Seclists" ] || [ -z "$(ls -A /opt/Seclists)" ]; then
     echo "📥 Downloading SecLists..."
-    sudo git clone https://github.com/danielmiessler/SecLists.git /opt/autorecon/SecLists
+    sudo git clone https://github.com/danielmiessler/SecLists.git /opt/Seclists
 else
     echo "✓ SecLists already exists, updating..."
-    sudo git -C /opt/autorecon/SecLists pull
+    sudo git -C /opt/Seclists pull
 fi
 
 # Download resolvers if not present
-if [ ! -f "/opt/autorecon/resolvers/resolvers-trusted.txt" ]; then
+if [ ! -f "/opt/Resolvers/resolvers-trusted.txt" ]; then
     echo "📥 Downloading trusted resolvers..."
-    sudo curl -L -o /opt/autorecon/resolvers/resolvers-trusted.txt \
+    sudo curl -L -o /opt/Resolvers/resolvers-trusted.txt \
         https://raw.githubusercontent.com/projectdiscovery/dnsx/main/scripts/resolvers-trusted.txt
 else
     echo "✓ Trusted resolvers already exist"
@@ -139,8 +138,10 @@ fi
 
 # Set permissions
 echo "🔐 Setting permissions..."
-sudo chown -R $USER:$USER /opt/autorecon
-chmod -R 755 /opt/autorecon
+sudo chown -R $USER:$USER /opt/Seclists
+sudo chown -R $USER:$USER /opt/Resolvers
+chmod -R 755 /opt/Seclists
+chmod -R 755 /opt/Resolvers
 
 # Build the application
 echo "🔨 Building AutoRecon..."
@@ -161,7 +162,7 @@ echo "║                    Installation Complete!                    ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 echo "✓ AutoRecon has been installed successfully!"
-echo "✓ Global dependencies are available in /opt/autorecon"
+echo "✓ Global dependencies are available in /opt/Seclists and /opt/Resolvers"
 echo "✓ You can now run: autorecon --help"
 echo
 echo "📋 Next steps:"
