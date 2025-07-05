@@ -454,6 +454,34 @@ func (p *Parser) ExtractTargetsFromShodanData(shodanData []string) []string {
 			urls := p.extractURLsFromShodan(data)
 			newTargets = append(newTargets, urls...)
 		}
+
+		// Extract ASN-based discoveries
+		if strings.Contains(data, "SHODAN_ASN_IP:") {
+			ips := p.extractIPsFromShodanASN(data)
+			newTargets = append(newTargets, ips...)
+		}
+
+		if strings.Contains(data, "SHODAN_ASN_HOSTNAME:") {
+			hostnames := p.extractHostnamesFromShodanASN(data)
+			newTargets = append(newTargets, hostnames...)
+		}
+
+		// Extract SSL-based discoveries
+		if strings.Contains(data, "SHODAN_SSL_DNS:") {
+			domains := p.extractDomainsFromShodanSSL(data)
+			newTargets = append(newTargets, domains...)
+		}
+
+		// Extract organization-based discoveries
+		if strings.Contains(data, "SHODAN_ORG_IP:") {
+			ips := p.extractIPsFromShodanOrg(data)
+			newTargets = append(newTargets, ips...)
+		}
+
+		if strings.Contains(data, "SHODAN_ORG_HOSTNAME:") {
+			hostnames := p.extractHostnamesFromShodanOrg(data)
+			newTargets = append(newTargets, hostnames...)
+		}
 	}
 
 	return p.removeDuplicates(newTargets)
@@ -896,4 +924,104 @@ func (p *Parser) ipToRange(ip string) string {
 		return fmt.Sprintf("%s.%s.%s.0/24", parts[0], parts[1], parts[2])
 	}
 	return ""
+}
+
+// extractIPsFromShodanASN extracts IP addresses from Shodan ASN search results
+func (p *Parser) extractIPsFromShodanASN(shodanASNData string) []string {
+	var ips []string
+
+	// Look for SHODAN_ASN_IP patterns
+	ipPattern := regexp.MustCompile(`SHODAN_ASN_IP:\s*(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})`)
+	matches := ipPattern.FindAllStringSubmatch(shodanASNData, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			ip := strings.TrimSpace(match[1])
+			if p.isValidIP(ip) {
+				ips = append(ips, ip)
+			}
+		}
+	}
+
+	return ips
+}
+
+// extractHostnamesFromShodanASN extracts hostnames from Shodan ASN search results
+func (p *Parser) extractHostnamesFromShodanASN(shodanASNData string) []string {
+	var hostnames []string
+
+	// Look for SHODAN_ASN_HOSTNAME patterns
+	hostnamePattern := regexp.MustCompile(`SHODAN_ASN_HOSTNAME:\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})`)
+	matches := hostnamePattern.FindAllStringSubmatch(shodanASNData, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			hostname := strings.TrimSpace(match[1])
+			if p.isValidDomain(hostname) {
+				hostnames = append(hostnames, hostname)
+			}
+		}
+	}
+
+	return hostnames
+}
+
+// extractDomainsFromShodanSSL extracts domain names from Shodan SSL search results
+func (p *Parser) extractDomainsFromShodanSSL(shodanSSLData string) []string {
+	var domains []string
+
+	// Look for SHODAN_SSL_DNS patterns
+	domainPattern := regexp.MustCompile(`SHODAN_SSL_DNS:\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})`)
+	matches := domainPattern.FindAllStringSubmatch(shodanSSLData, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			domain := strings.TrimSpace(match[1])
+			if p.isValidDomain(domain) {
+				domains = append(domains, domain)
+			}
+		}
+	}
+
+	return domains
+}
+
+// extractIPsFromShodanOrg extracts IP addresses from Shodan organization search results
+func (p *Parser) extractIPsFromShodanOrg(shodanOrgData string) []string {
+	var ips []string
+
+	// Look for SHODAN_ORG_IP patterns
+	ipPattern := regexp.MustCompile(`SHODAN_ORG_IP:\s*(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})`)
+	matches := ipPattern.FindAllStringSubmatch(shodanOrgData, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			ip := strings.TrimSpace(match[1])
+			if p.isValidIP(ip) {
+				ips = append(ips, ip)
+			}
+		}
+	}
+
+	return ips
+}
+
+// extractHostnamesFromShodanOrg extracts hostnames from Shodan organization search results
+func (p *Parser) extractHostnamesFromShodanOrg(shodanOrgData string) []string {
+	var hostnames []string
+
+	// Look for SHODAN_ORG_HOSTNAME patterns
+	hostnamePattern := regexp.MustCompile(`SHODAN_ORG_HOSTNAME:\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})`)
+	matches := hostnamePattern.FindAllStringSubmatch(shodanOrgData, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			hostname := strings.TrimSpace(match[1])
+			if p.isValidDomain(hostname) {
+				hostnames = append(hostnames, hostname)
+			}
+		}
+	}
+
+	return hostnames
 }

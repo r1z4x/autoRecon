@@ -774,8 +774,10 @@ func (s *Scanner) runShodanScan(ctx context.Context, target, targetDir string) (
 		return nil, fmt.Errorf("shodan CLI not found: %w", err)
 	}
 
-	// Create shodan output file
-	shodanOutput := filepath.Join(targetDir, "shodan.json")
+	var allResults []string
+
+	// 1. Basic host information
+	shodanOutput := filepath.Join(targetDir, "shodan_host.json")
 	shodanArgs := []string{
 		"host", target,
 		"--format", "json",
@@ -783,23 +785,37 @@ func (s *Scanner) runShodanScan(ctx context.Context, target, targetDir string) (
 	}
 
 	shodanCmd := exec.CommandContext(ctx, "shodan", shodanArgs...)
-	if err := shodanCmd.Run(); err != nil {
-		return nil, fmt.Errorf("shodan scan failed: %w", err)
+	if err := shodanCmd.Run(); err == nil {
+		// Read and parse results
+		content, err := os.ReadFile(shodanOutput)
+		if err == nil {
+			// Parse JSON and extract relevant information
+			results, err := s.parseShodanJSON(string(content))
+			if err == nil {
+				allResults = append(allResults, results...)
+			}
+		}
 	}
 
-	// Read and parse results
-	content, err := os.ReadFile(shodanOutput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read shodan output: %w", err)
+	// 2. ASN-based search for related targets
+	asnResults, err := s.runShodanASNSearch(ctx, target, targetDir)
+	if err == nil {
+		allResults = append(allResults, asnResults...)
 	}
 
-	// Parse JSON and extract relevant information
-	results, err := s.parseShodanJSON(string(content))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse shodan output: %w", err)
+	// 3. SSL certificate search
+	sslResults, err := s.runShodanSSLSearch(ctx, target, targetDir)
+	if err == nil {
+		allResults = append(allResults, sslResults...)
 	}
 
-	return results, nil
+	// 4. Organization-based search
+	orgResults, err := s.runShodanOrgSearch(ctx, target, targetDir)
+	if err == nil {
+		allResults = append(allResults, orgResults...)
+	}
+
+	return allResults, nil
 }
 
 // extractCertificateInfo extracts SSL certificate information
@@ -898,11 +914,25 @@ func (s *Scanner) ScanSSLDiscovery(ctx context.Context, targets []string, projec
 			}
 		}
 
+		// Extract ASN information from SSL certificate
+		asnResults, err := s.extractASNFromSSL(ctx, target, certInfo, sslDir)
+		if err == nil {
+			allResults = append(allResults, asnResults...)
+		}
+
 		// Try to find related targets using certificate fingerprint
 		if certInfo.Fingerprint != "" {
 			// Search for targets with similar certificate patterns
 			relatedTargets := s.searchRelatedTargetsByCertificate(ctx, certInfo, sslDir)
 			allResults = append(allResults, relatedTargets...)
+		}
+
+		// Search for targets with same issuer
+		if certInfo.Issuer != "" {
+			issuerResults, err := s.searchTargetsByIssuer(ctx, certInfo.Issuer, sslDir)
+			if err == nil {
+				allResults = append(allResults, issuerResults...)
+			}
 		}
 
 		// Check if context is cancelled
@@ -2550,4 +2580,333 @@ func (s *Scanner) removeDuplicateASNs(asns []string) []string {
 	}
 
 	return result
+}
+
+// runShodanASNSearch performs ASN-based search using Shodan
+func (s *Scanner) runShodanASNSearch(ctx context.Context, target, targetDir string) ([]string, error) {
+	var results []string
+
+	// First, get ASN for the target
+	asnInfo, err := s.findASNForTarget(ctx, target)
+	if err != nil {
+		return results, nil // Continue without ASN info
+	}
+
+	if asnInfo.ASN != "" {
+		// Search Shodan for the same ASN
+		shodanOutput := filepath.Join(targetDir, "shodan_asn.json")
+		shodanArgs := []string{
+			"search",
+			fmt.Sprintf("asn:AS%s", asnInfo.ASN),
+			"--format", "json",
+			"-o", shodanOutput,
+		}
+
+		shodanCmd := exec.CommandContext(ctx, "shodan", shodanArgs...)
+		if err := shodanCmd.Run(); err == nil {
+			// Read and parse results
+			content, err := os.ReadFile(shodanOutput)
+			if err == nil {
+				// Extract IPs and hostnames from ASN search results
+				lines := strings.Split(string(content), "\n")
+				for _, line := range lines {
+					if strings.Contains(line, "\"ip_str\"") {
+						if ip := s.extractIPFromJSON(line); ip != "" && ip != target {
+							results = append(results, fmt.Sprintf("SHODAN_ASN_IP: %s", ip))
+						}
+					}
+					if strings.Contains(line, "\"hostnames\"") {
+						// Extract hostnames from JSON
+						hostnamePattern := regexp.MustCompile(`"([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})"`)
+						matches := hostnamePattern.FindAllStringSubmatch(line, -1)
+						for _, match := range matches {
+							if len(match) > 1 {
+								hostname := strings.TrimSpace(match[1])
+								if hostname != target {
+									results = append(results, fmt.Sprintf("SHODAN_ASN_HOSTNAME: %s", hostname))
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return results, nil
+}
+
+// runShodanSSLSearch performs SSL certificate search using Shodan
+func (s *Scanner) runShodanSSLSearch(ctx context.Context, target, targetDir string) ([]string, error) {
+	var results []string
+
+	// Search Shodan for SSL certificates related to the target
+	shodanOutput := filepath.Join(targetDir, "shodan_ssl.json")
+	shodanArgs := []string{
+		"search",
+		fmt.Sprintf("ssl:\"%s\"", target),
+		"--format", "json",
+		"-o", shodanOutput,
+	}
+
+	shodanCmd := exec.CommandContext(ctx, "shodan", shodanArgs...)
+	if err := shodanCmd.Run(); err == nil {
+		// Read and parse results
+		content, err := os.ReadFile(shodanOutput)
+		if err == nil {
+			// Extract SSL-related information
+			lines := strings.Split(string(content), "\n")
+			for _, line := range lines {
+				if strings.Contains(line, "\"ssl\"") {
+					// Extract SSL certificate information
+					sslPattern := regexp.MustCompile(`"ssl":\s*\{[^}]*"subject":\s*"([^"]*)"`)
+					matches := sslPattern.FindStringSubmatch(line)
+					if len(matches) > 1 {
+						subject := matches[1]
+						results = append(results, fmt.Sprintf("SHODAN_SSL_SUBJECT: %s", subject))
+					}
+
+					// Extract DNS names from SSL
+					dnsPattern := regexp.MustCompile(`"dns":\s*\[([^\]]*)\]`)
+					dnsMatches := dnsPattern.FindStringSubmatch(line)
+					if len(dnsMatches) > 1 {
+						dnsNames := strings.Split(dnsMatches[1], ",")
+						for _, dnsName := range dnsNames {
+							dnsName = strings.Trim(strings.TrimSpace(dnsName), `"`)
+							if dnsName != "" && dnsName != target {
+								results = append(results, fmt.Sprintf("SHODAN_SSL_DNS: %s", dnsName))
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return results, nil
+}
+
+// runShodanOrgSearch performs organization-based search using Shodan
+func (s *Scanner) runShodanOrgSearch(ctx context.Context, target, targetDir string) ([]string, error) {
+	var results []string
+
+	// Get organization information for the target
+	asnInfo, err := s.findASNForTarget(ctx, target)
+	if err != nil {
+		return results, nil // Continue without org info
+	}
+
+	if asnInfo.OrgName != "" {
+		// Search Shodan for the same organization
+		shodanOutput := filepath.Join(targetDir, "shodan_org.json")
+		shodanArgs := []string{
+			"search",
+			fmt.Sprintf("org:\"%s\"", asnInfo.OrgName),
+			"--format", "json",
+			"-o", shodanOutput,
+		}
+
+		shodanCmd := exec.CommandContext(ctx, "shodan", shodanArgs...)
+		if err := shodanCmd.Run(); err == nil {
+			// Read and parse results
+			content, err := os.ReadFile(shodanOutput)
+			if err == nil {
+				// Extract IPs and hostnames from organization search results
+				lines := strings.Split(string(content), "\n")
+				for _, line := range lines {
+					if strings.Contains(line, "\"ip_str\"") {
+						if ip := s.extractIPFromJSON(line); ip != "" && ip != target {
+							results = append(results, fmt.Sprintf("SHODAN_ORG_IP: %s", ip))
+						}
+					}
+					if strings.Contains(line, "\"hostnames\"") {
+						// Extract hostnames from JSON
+						hostnamePattern := regexp.MustCompile(`"([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})"`)
+						matches := hostnamePattern.FindAllStringSubmatch(line, -1)
+						for _, match := range matches {
+							if len(match) > 1 {
+								hostname := strings.TrimSpace(match[1])
+								if hostname != target {
+									results = append(results, fmt.Sprintf("SHODAN_ORG_HOSTNAME: %s", hostname))
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return results, nil
+}
+
+// extractASNFromSSL extracts ASN information from SSL certificate and finds related targets
+func (s *Scanner) extractASNFromSSL(ctx context.Context, target string, certInfo *SSLCertificateInfo, sslDir string) ([]string, error) {
+	var results []string
+
+	// Get ASN information for the target
+	asnInfo, err := s.findASNForTarget(ctx, target)
+	if err != nil {
+		return results, nil // Continue without ASN info
+	}
+
+	if asnInfo.ASN != "" {
+		// Add ASN information to results
+		results = append(results, fmt.Sprintf("SSL_ASN: %s", asnInfo.ASN))
+		results = append(results, fmt.Sprintf("SSL_ORG: %s", asnInfo.OrgName))
+
+		// Search for other targets in the same ASN
+		asnTargets, err := s.searchTargetsByASN(ctx, asnInfo.ASN, sslDir)
+		if err == nil {
+			results = append(results, asnTargets...)
+		}
+
+		// Search for targets with same organization
+		if asnInfo.OrgName != "" {
+			orgTargets, err := s.searchTargetsByOrganization(ctx, asnInfo.OrgName, sslDir)
+			if err == nil {
+				results = append(results, orgTargets...)
+			}
+		}
+	}
+
+	return results, nil
+}
+
+// searchTargetsByIssuer searches for targets with the same SSL certificate issuer
+func (s *Scanner) searchTargetsByIssuer(ctx context.Context, issuer string, sslDir string) ([]string, error) {
+	var results []string
+
+	// Search using Shodan for SSL certificates with same issuer
+	if err := s.checkTool("shodan"); err == nil {
+		shodanOutput := filepath.Join(sslDir, fmt.Sprintf("issuer_%s.json", strings.ReplaceAll(issuer, " ", "_")))
+		shodanArgs := []string{
+			"search",
+			fmt.Sprintf("ssl.issuer:\"%s\"", issuer),
+			"--format", "json",
+			"-o", shodanOutput,
+		}
+
+		shodanCmd := exec.CommandContext(ctx, "shodan", shodanArgs...)
+		if err := shodanCmd.Run(); err == nil {
+			// Read and parse results
+			content, err := os.ReadFile(shodanOutput)
+			if err == nil {
+				// Extract hostnames and IPs from results
+				lines := strings.Split(string(content), "\n")
+				for _, line := range lines {
+					if strings.Contains(line, "\"ip_str\"") {
+						if ip := s.extractIPFromJSON(line); ip != "" {
+							results = append(results, fmt.Sprintf("SSL_ISSUER_IP: %s", ip))
+						}
+					}
+					if strings.Contains(line, "\"hostnames\"") {
+						// Extract hostnames from JSON
+						hostnamePattern := regexp.MustCompile(`"([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})"`)
+						matches := hostnamePattern.FindAllStringSubmatch(line, -1)
+						for _, match := range matches {
+							if len(match) > 1 {
+								hostname := strings.TrimSpace(match[1])
+								results = append(results, fmt.Sprintf("SSL_ISSUER_HOSTNAME: %s", hostname))
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return results, nil
+}
+
+// searchTargetsByASN searches for targets in the same ASN
+func (s *Scanner) searchTargetsByASN(ctx context.Context, asn string, sslDir string) ([]string, error) {
+	var results []string
+
+	// Search using Shodan for targets in the same ASN
+	if err := s.checkTool("shodan"); err == nil {
+		shodanOutput := filepath.Join(sslDir, fmt.Sprintf("asn_%s.json", asn))
+		shodanArgs := []string{
+			"search",
+			fmt.Sprintf("asn:AS%s", asn),
+			"--format", "json",
+			"-o", shodanOutput,
+		}
+
+		shodanCmd := exec.CommandContext(ctx, "shodan", shodanArgs...)
+		if err := shodanCmd.Run(); err == nil {
+			// Read and parse results
+			content, err := os.ReadFile(shodanOutput)
+			if err == nil {
+				// Extract hostnames and IPs from results
+				lines := strings.Split(string(content), "\n")
+				for _, line := range lines {
+					if strings.Contains(line, "\"ip_str\"") {
+						if ip := s.extractIPFromJSON(line); ip != "" {
+							results = append(results, fmt.Sprintf("SSL_ASN_IP: %s", ip))
+						}
+					}
+					if strings.Contains(line, "\"hostnames\"") {
+						// Extract hostnames from JSON
+						hostnamePattern := regexp.MustCompile(`"([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})"`)
+						matches := hostnamePattern.FindAllStringSubmatch(line, -1)
+						for _, match := range matches {
+							if len(match) > 1 {
+								hostname := strings.TrimSpace(match[1])
+								results = append(results, fmt.Sprintf("SSL_ASN_HOSTNAME: %s", hostname))
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return results, nil
+}
+
+// searchTargetsByOrganization searches for targets with the same organization
+func (s *Scanner) searchTargetsByOrganization(ctx context.Context, orgName string, sslDir string) ([]string, error) {
+	var results []string
+
+	// Search using Shodan for targets with same organization
+	if err := s.checkTool("shodan"); err == nil {
+		shodanOutput := filepath.Join(sslDir, fmt.Sprintf("org_%s.json", strings.ReplaceAll(orgName, " ", "_")))
+		shodanArgs := []string{
+			"search",
+			fmt.Sprintf("org:\"%s\"", orgName),
+			"--format", "json",
+			"-o", shodanOutput,
+		}
+
+		shodanCmd := exec.CommandContext(ctx, "shodan", shodanArgs...)
+		if err := shodanCmd.Run(); err == nil {
+			// Read and parse results
+			content, err := os.ReadFile(shodanOutput)
+			if err == nil {
+				// Extract hostnames and IPs from results
+				lines := strings.Split(string(content), "\n")
+				for _, line := range lines {
+					if strings.Contains(line, "\"ip_str\"") {
+						if ip := s.extractIPFromJSON(line); ip != "" {
+							results = append(results, fmt.Sprintf("SSL_ORG_IP: %s", ip))
+						}
+					}
+					if strings.Contains(line, "\"hostnames\"") {
+						// Extract hostnames from JSON
+						hostnamePattern := regexp.MustCompile(`"([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})"`)
+						matches := hostnamePattern.FindAllStringSubmatch(line, -1)
+						for _, match := range matches {
+							if len(match) > 1 {
+								hostname := strings.TrimSpace(match[1])
+								results = append(results, fmt.Sprintf("SSL_ORG_HOSTNAME: %s", hostname))
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return results, nil
 }
